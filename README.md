@@ -1,4 +1,4 @@
-This repository contains the E-Commerce System with multiple services including Order, Inventory, and an API Gateway. The system uses gRPC for internal communication and Gin as the web framework. This project is still in progress
+# This repository contains the E-Commerce System with multiple services including Order, Inventory, and an API Gateway. The system uses gRPC for internal communication and Gin as the web framework. This project is still in progress
 
 Technologies Used
 Go (Golang) – Backend Programming Language
