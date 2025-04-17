@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package inventory;
+
+option go_package = "/proto;inventorypb";
+
+message Product {
+   int64 id = 1;
+   string name = 2;
+   string description = 3;
+   int32 stock = 4;
+   double price = 5;
+   int32 category_id = 6;
+}
+
+message CreateProductRequest {
+   string name = 1;
+   string description = 2;
+   int32 stock = 3;
+   double price = 4;
+   int32 category_id = 5;
+}
+
+message UpdateProductRequest {
+   int64 id = 1;
+   string name = 2;
+   string description = 3;
+   int32 stock = 4;
+   double price = 5;
+   int32 category_id = 6;
+}
+
+message GetProductRequest {
+   int64 id = 1;
+}
+
+message DeleteProductRequest {
+   int64 id = 1;
+}
+
+message ProductResponse {
+   Product product = 1;
+}
+
+message ListProductsRequest {}
+
+message ListProductsResponse {
+   repeated Product products = 1;
+}
+
+message Empty {}
+
+service InventoryService {
+   rpc CreateProduct(CreateProductRequest) returns (ProductResponse);
+   rpc GetProductByID(GetProductRequest) returns (ProductResponse);
+   rpc UpdateProduct(UpdateProductRequest) returns (ProductResponse);
+   rpc DeleteProduct(DeleteProductRequest) returns (Empty);
+   rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+}
