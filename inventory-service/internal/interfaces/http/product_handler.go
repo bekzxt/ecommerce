@@ -51,7 +51,7 @@ func (h *ProductHandler) Create(c *gin.Context) {
 }
 
 func (h *ProductHandler) GetByID(c *gin.Context) {
-	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 32)
 	product, err := h.uc.GetByID(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
@@ -61,8 +61,7 @@ func (h *ProductHandler) GetByID(c *gin.Context) {
 }
 
 func (h *ProductHandler) Update(c *gin.Context) {
-	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 32)
 	var req dto.UpdateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -99,7 +98,7 @@ func (h *ProductHandler) Update(c *gin.Context) {
 }
 
 func (h *ProductHandler) Delete(c *gin.Context) {
-	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 32)
 	if err := h.uc.Delete(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

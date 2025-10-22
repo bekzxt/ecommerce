@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"fmt"
 	"github.com/bekzxt/e-commerce/inventory-service/internal/domain"
 )
 
@@ -76,4 +77,28 @@ func (r *ProductRepo) List() ([]*domain.Product, error) {
 		products = append(products, &p)
 	}
 	return products, nil
+}
+
+func (r *ProductRepo) DecreaseStock(productID int64, quantity int) error {
+	// уменьшаем stock только если его хватает
+	query := `
+        UPDATE products
+        SET stock = stock - $1
+        WHERE id = $2 AND stock >= $1
+    `
+	result, err := r.db.Exec(query, quantity, productID)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return fmt.Errorf("not enough stock for product %d", productID)
+	}
+
+	return nil
 }

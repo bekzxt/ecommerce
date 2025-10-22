@@ -8,4 +8,5 @@ type ProductRepository interface {
 	Update(product *domain.Product) (*domain.Product, error)
 	Delete(id int64) error
 	List() ([]*domain.Product, error)
+	DecreaseStock(productID int64, quantity int) error
 }

@@ -3,6 +3,7 @@ package usecase
 import (
 	"github.com/bekzxt/e-commerce/inventory-service/internal/domain"
 	"github.com/bekzxt/e-commerce/inventory-service/internal/interfaces/repository"
+	"log"
 )
 
 type ProductUseCase struct {
@@ -31,4 +32,26 @@ func (uc *ProductUseCase) Delete(id int64) error {
 
 func (uc *ProductUseCase) List() ([]*domain.Product, error) {
 	return uc.repo.List()
+}
+
+func (uc *ProductUseCase) ReserveItems(items []domain.OrderItemInv) (bool, error) {
+
+	for _, item := range items {
+		product, err := uc.repo.GetByID(item.ProductID)
+		log.Print("productid: ", item.ProductID)
+		if err != nil {
+			return false, err
+		}
+		if product.Stock < int32(item.Quantity) {
+			return false, nil // товара нет
+		}
+	}
+	// Если хватает — уменьшаем остаток
+	for _, item := range items {
+		err := uc.repo.DecreaseStock(item.ProductID, item.Quantity)
+		if err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }

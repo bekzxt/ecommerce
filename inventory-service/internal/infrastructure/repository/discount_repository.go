@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"github.com/bekzxt/e-commerce/inventory-service/internal/domain"
 	"github.com/lib/pq"
+	_ "github.com/lib/pq"
 )
 
 type DiscountRepo struct {
