@@ -7,7 +7,7 @@ type CreateOrderRequest struct {
 }
 
 type OrderItemRequest struct {
-	ProductID string  `json:"product_id" binding:"required"`
+	ProductID int64   `json:"product_id" binding:"required"`
 	Quantity  int     `json:"quantity" binding:"required,min=1"`
 	Price     float64 `json:"price" binding:"required,gt=0"`
 }
@@ -21,7 +21,7 @@ type OrderResponse struct {
 }
 
 type OrderItemResponse struct {
-	ProductID string  `json:"productID"`
+	ProductID int64   `json:"productID"`
 	Quantity  int     `json:"quantity"`
 	Price     float64 `json:"price"`
 }

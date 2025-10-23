@@ -1,4 +1,14 @@
-FROM ubuntu:latest
-LABEL authors="aabek"
+FROM golang:1.24
 
-ENTRYPOINT ["top", "-b"]
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN go build -o app ./cmd/main.go
+
+EXPOSE 50052
+
+CMD ["./app"]

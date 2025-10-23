@@ -10,10 +10,10 @@ type Order struct {
 	Items      []OrderItem
 }
 type OrderItem struct {
-	OrderID   string
-	ProductID string
-	Quantity  int
-	Price     float64
+	OrderID   string  `json:"order_id"`
+	ProductID int64   `json:"product_id"`
+	Quantity  int     `json:"quantity"`
+	Price     float64 `json:"price"`
 }
 
 type OrderStatus string
@@ -24,7 +24,24 @@ const (
 	Cancelled OrderStatus = "cancelled"
 )
 
+type OrderCreatedEvent struct {
+	OrderID string      `json:"order_id"`
+	UserID  string      `json:"user_id"`
+	Total   float64     `json:"total"`
+	Status  string      `json:"status"`
+	Items   []OrderItem `json:"items"`
+}
+
 var (
 	ErrOrderNotFound = errors.New("order not found")
 	ErrInvalidStatus = errors.New("invalid status")
 )
+
+type OrderReservedEvent struct {
+	OrderID string `json:"order_id"`
+}
+
+type OrderRejectedEvent struct {
+	OrderID string `json:"order_id"`
+	Reason  string `json:"reason,omitempty"`
+}

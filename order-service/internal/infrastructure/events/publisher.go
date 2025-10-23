@@ -8,8 +8,18 @@ import (
 	"github.com/streadway/amqp"
 )
 
+type Publisher interface {
+	Publish(eventType string, payload interface{}) error
+}
+
 type RabbitMQPublisher struct {
 	channel *amqp.Channel
+	conn    *amqp.Connection
+}
+
+func (p *RabbitMQPublisher) Close() {
+	p.channel.Close()
+	p.conn.Close()
 }
 
 func NewRabbitMQPublisher() (*RabbitMQPublisher, error) {
@@ -37,11 +47,13 @@ func NewRabbitMQPublisher() (*RabbitMQPublisher, error) {
 		log.Fatal("Failed to declare exchange:", err)
 	}
 
-	return &RabbitMQPublisher{channel: ch}, nil
+	return &RabbitMQPublisher{channel: ch, conn: conn}, nil
 }
 
 func (p *RabbitMQPublisher) Publish(eventType string, payload interface{}) error {
+
 	body, err := json.Marshal(payload)
+	log.Println("📤 OrderCreatedEvent sending to RabbitMQ:", string(body))
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ecommerce-net
+
+  migrate-order:
+    image: migrate/migrate
+    container_name: migrate-order
+    depends_on:
+      - postgres
+    command: [
+      "-path", "/migrations",
+      "-database", "postgres://postgres:postgres@postgres:5432/orders_db?sslmode=disable",
+      "up"
+    ]
+    volumes:
+      - ./order-service/migrations:/migrations
+    networks:
+      - ecommerce-net
+    restart: on-failure
+
+  migrate-inventory:
+    image: migrate/migrate
+    container_name: migrate-inventory
+    depends_on:
+      - postgres
+    command: [
+      "-path", "/migrations",
+      "-database", "postgres://postgres:postgres@postgres:5432/inventory_db?sslmode=disable",
+      "-verbose",
+      "up"
+    ]
+    volumes:
+      - ./inventory-service/migrations:/migrations
+    networks:
+      - ecommerce-net
+    restart: on-failure
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - ecommerce-net
+
+
+  order-service:
+    build: ./order-service
+    container_name: order-service
+
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      migrate-order:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: orders_db
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    ports:
+      - "50052:50052"
+    networks:
+      - ecommerce-net
+
+  inventory-service:
+    build: ./inventory-service
+    container_name: inventory-service
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      migrate-order:
+        condition: service_completed_successfully
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: inventory_db
+    ports:
+      - "50051:50051"
+    networks:
+      - ecommerce-net
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: api-gateway
+    depends_on:
+      - order-service
+      - inventory-service
+    ports:
+      - "8080:8080"
+    environment:
+      ORDER_SERVICE_HOST: order-service:50052
+      INVENTORY_SERVICE_HOST: inventory-service:50051
+    networks:
+      - ecommerce-net
+
+volumes:
+  pgdata:
+
+networks:
+  ecommerce-net:
+    driver: bridge

@@ -2,18 +2,21 @@ package usecase
 
 import (
 	"github.com/bekzxt/e-commerce/order-service/internal/domain"
+	"github.com/bekzxt/e-commerce/order-service/internal/infrastructure/events"
 	"github.com/bekzxt/e-commerce/order-service/internal/interfaces/dto"
 	"github.com/bekzxt/e-commerce/order-service/internal/interfaces/repository"
 	"github.com/google/uuid"
+	"log"
 )
 
 type OrderUseCase struct {
 	orderRepo     repository.OrderRepository
 	orderItemRepo repository.OrderItemRepository
+	publisher     events.Publisher
 }
 
-func NewOrderUseCase(repo repository.OrderRepository, i repository.OrderItemRepository) *OrderUseCase {
-	return &OrderUseCase{orderRepo: repo, orderItemRepo: i}
+func NewOrderUseCase(repo repository.OrderRepository, i repository.OrderItemRepository, pub events.Publisher) *OrderUseCase {
+	return &OrderUseCase{orderRepo: repo, orderItemRepo: i, publisher: pub}
 }
 
 func (uc *OrderUseCase) CreateOrder(req dto.CreateOrderRequest) (*domain.Order, error) {
@@ -41,10 +44,25 @@ func (uc *OrderUseCase) CreateOrder(req dto.CreateOrderRequest) (*domain.Order, 
 	}
 
 	for _, item := range items {
+		log.Printf("productid: %d", item.ProductID)
 		if err := uc.orderItemRepo.CreateOrderItem(&item); err != nil {
 			return nil, err
 		}
 	}
+
+	event := domain.OrderCreatedEvent{
+		OrderID: order.ID,
+		UserID:  order.UserID,
+		Total:   order.TotalPrice,
+		Status:  string(order.Status),
+		Items:   order.Items,
+	}
+
+	err := uc.publisher.Publish("order.created", event)
+	if err != nil {
+		log.Printf("⚠️ Failed to publish event: %v", err) // Не ломаем сервис
+	}
+
 	return order, nil
 }
 

@@ -12,17 +12,15 @@ import (
 )
 
 func main() {
-	orderConn, err := grpc.Dial("localhost:50052", grpc.WithInsecure())
+	orderConn, err := grpc.Dial("order-service:50052", grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("Failed to connect to Order service: %v", err)
 	}
-	defer orderConn.Close()
 
-	invConn, err := grpc.Dial("localhost:50051", grpc.WithInsecure())
+	invConn, err := grpc.Dial("inventory-service:50051", grpc.WithInsecure())
 	if err != nil {
 		log.Fatalf("Failed to connect to Inventory service: %v", err)
 	}
-	defer invConn.Close()
 
 	orderClient := orderpb.NewOrderServiceClient(orderConn)
 	invClient := inventorypb.NewInventoryServiceClient(invConn)
@@ -100,8 +98,8 @@ func main() {
 		c.JSON(http.StatusOK, resp)
 	})
 	r.GET("/products/:id", func(c *gin.Context) {
-		productID := c.Param("id")
-		id, err := strconv.ParseInt(productID, 10, 64)
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 32)
+
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID"})
 			return
@@ -118,11 +116,7 @@ func main() {
 		c.JSON(http.StatusOK, resp)
 	})
 	r.GET("/products", func(c *gin.Context) {
-		req := &inventorypb.ListProductsRequest{}
-		if err := c.ShouldBindJSON(req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
+		req := &inventorypb.ListProductsRequest{} // empty request
 		resp, err := invClient.ListProducts(c, req)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -132,8 +126,8 @@ func main() {
 	})
 
 	r.PATCH("/products/:id", func(c *gin.Context) {
-		productID := c.Param("id")
-		id, err := strconv.ParseInt(productID, 10, 64)
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 32)
+
 		req := &inventorypb.UpdateProductRequest{Id: id}
 		if err := c.ShouldBindJSON(req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -147,8 +141,8 @@ func main() {
 		c.JSON(http.StatusOK, resp)
 	})
 	r.DELETE("/products/:id", func(c *gin.Context) {
-		productID := c.Param("id")
-		id, err := strconv.ParseInt(productID, 10, 64)
+		id, _ := strconv.ParseInt(c.Param("id"), 10, 32)
+
 		req := &inventorypb.DeleteProductRequest{Id: id}
 		if err := c.ShouldBindJSON(req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
