@@ -84,6 +84,8 @@ services:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     ports:
       - "50052:50052"
+      - "8082:8082"
+      - "2112:2112"
     networks:
       - ecommerce-net
 
@@ -103,8 +105,38 @@ services:
       DB_NAME: inventory_db
     ports:
       - "50051:50051"
+      - "8081:8081"
+      - "2113:2113"
     networks:
       - ecommerce-net
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    networks:
+      - ecommerce-net
+    depends_on:
+      - order-service
+      - inventory-service
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - ecommerce-net
+    depends_on:
+      - prometheus
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
 
   api-gateway:
     build:

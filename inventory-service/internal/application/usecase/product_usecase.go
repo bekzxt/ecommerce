@@ -55,3 +55,17 @@ func (uc *ProductUseCase) ReserveItems(items []domain.OrderItemInv) (bool, error
 	}
 	return true, nil
 }
+
+// CheckStock проверяет наличие товаров на складе
+func (uc *ProductUseCase) CheckStock(items []domain.OrderItemInv) (bool, []int64) {
+	var missing []int64
+
+	for _, item := range items {
+		product, err := uc.repo.GetByID(item.ProductID)
+		if err != nil || product.Stock < int32(item.Quantity) {
+			missing = append(missing, item.ProductID)
+		}
+	}
+
+	return len(missing) == 0, missing
+}

@@ -1,12 +1,8 @@
 package main
 
 import (
-	"log"
-	"net"
-	"os"
-	"time"
-
 	"github.com/bekzxt/e-commerce/order-service/internal/application/usecase"
+	"github.com/bekzxt/e-commerce/order-service/internal/infrastructure"
 	"github.com/bekzxt/e-commerce/order-service/internal/infrastructure/db"
 	events "github.com/bekzxt/e-commerce/order-service/internal/infrastructure/events"
 	"github.com/bekzxt/e-commerce/order-service/internal/infrastructure/repository"
@@ -15,8 +11,13 @@ import (
 	"github.com/bekzxt/e-commerce/order-service/internal/interfaces/http"
 	orderpb "github.com/bekzxt/e-commerce/order-service/proto"
 	reviewpb "github.com/bekzxt/e-commerce/order-service/proto_review"
+	"github.com/gin-gonic/gin"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/joho/godotenv"
+	ginprom "github.com/zsais/go-gin-prometheus"
 	"google.golang.org/grpc"
+	"log"
+	"net"
 )
 
 func main() {
@@ -29,18 +30,6 @@ func main() {
 		log.Fatalf("❌ Failed to connect to DB: %v", err)
 	}
 	defer database.Close()
-	var publisher *events.RabbitMQPublisher
-	for {
-		publisher, err = events.NewRabbitMQPublisher()
-		if err == nil {
-			log.Println("✅ Connected to RabbitMQ:", os.Getenv("RABBITMQ_URL"))
-			break
-		}
-
-		log.Println("⚠️ RabbitMQ not ready yet, retrying in 3 seconds...")
-		time.Sleep(3 * time.Second)
-	}
-	defer publisher.Close()
 	if err != nil {
 		log.Fatalf("❌ Failed to connect RabbitMQ after retries: %v", err)
 	}
@@ -59,8 +48,8 @@ func main() {
 		}
 		defer cleanup()
 	}
-
-	orderUseCase := usecase.NewOrderUseCase(orderRepo, orderItemRepo, publisher)
+	invClient := infrastructure.NewInventoryClient("http://inventory-service:8081")
+	orderUseCase := usecase.NewOrderUseCase(orderRepo, orderItemRepo, invClient)
 	reviewUseCase := usecase.NewReviewUseCase(reviewRepo)
 
 	// HTTP handler
@@ -70,24 +59,42 @@ func main() {
 	orderGRPC := gr.NewOrderHandler(orderUseCase)
 	reviewGRPC := gr.NewReviewHandler(reviewUseCase)
 
-	// Start gRPC server
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(grpc_prometheus.UnaryServerInterceptor),
+		grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
+	)
+
+	// Регистрируем сервисы
+	orderpb.RegisterOrderServiceServer(s, orderGRPC)
+	reviewpb.RegisterReviewServiceServer(s, reviewGRPC)
+
+	// Регистрируем метрики Prometheus
+	grpc_prometheus.Register(s)
+
+	// Стартуем gRPC сервер
 	go func() {
 		lis, err := net.Listen("tcp", ":50052")
 		if err != nil {
-			log.Fatalf("❌ gRPC failed: %v", err)
+			log.Fatalf("❌ Failed to listen gRPC: %v", err)
 		}
-		grpcServer := grpc.NewServer()
-		orderpb.RegisterOrderServiceServer(grpcServer, orderGRPC)
-		reviewpb.RegisterReviewServiceServer(grpcServer, reviewGRPC)
 
-		log.Println("✅ gRPC Order Service running on :50052")
-		if err := grpcServer.Serve(lis); err != nil {
+		log.Println("✅ gRPC Server running on :50052")
+		if err := s.Serve(lis); err != nil {
 			log.Fatalf("❌ Failed to serve gRPC: %v", err)
 		}
 	}()
 
+	infrastructure.StartMetricsServer()
 	// Start HTTP server
-	r := router.SetupRouter(*orderHandler)
+	r := gin.Default()
+
+	// ✅ Добавляем HTTP метрики
+	p := ginprom.NewPrometheus("order_service")
+	p.Use(r)
+
+	// ✅ Регистрируем маршруты
+	router.SetupRoutes(r, *orderHandler)
+
 	log.Println("✅ HTTP Order Service running on :8082")
 	if err := r.Run(":8082"); err != nil {
 		log.Fatalf("❌ Failed to start HTTP: %v", err)

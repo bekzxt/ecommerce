@@ -2,6 +2,11 @@ package main
 
 import (
 	_ "database/sql"
+	"github.com/bekzxt/e-commerce/inventory-service/internal/infrastructure"
+	"log"
+	"net"
+	"time"
+
 	"github.com/bekzxt/e-commerce/inventory-service/internal/application/usecase"
 	"github.com/bekzxt/e-commerce/inventory-service/internal/infrastructure/db"
 	"github.com/bekzxt/e-commerce/inventory-service/internal/infrastructure/events"
@@ -12,90 +17,90 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
-	"google.golang.org/grpc"
-	"log"
-	"net"
-	"os"
-	"time"
 )
 
 func main() {
-	err := godotenv.Load("../.env")
+	godotenv.Load("../.env")
+
+	// Connect DB
+	database, err := db.ConnectPostgres()
 	if err != nil {
-		log.Println("Error loading .env file")
-	}
-	database, err1 := db.ConnectPostgres()
-	if err1 != nil {
-		log.Fatalf("Failed to connect to DB: %v", err1)
+		log.Fatalf("Failed to connect to DB: %v", err)
 	}
 	defer database.Close()
 
-	lis, err := net.Listen("tcp", ":50051")
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
+	// Start Metrics Server
+	infrastructure.StartMetricsServer()
 
+	// Init gRPC with Prometheus
+	s := infrastructure.NewGRPCServerWithMetrics()
+
+	// Register repositories
 	productRepo := repository.NewProductRepo(database)
 	productUC := usecase.NewProductUseCase(productRepo)
+	productHandler := grpchandler.NewProductHandler(productUC)
+	pb.RegisterInventoryServiceServer(s, productHandler)
 
+	// RabbitMQ Publisher
 	var pub *events.RabbitMQPublisher
 	for {
 		p, err := events.NewRabbitMQPublisher()
 		if err == nil {
 			pub = p
-			log.Println("✅ Connected to RabbitMQ Publisher (inventory):", os.Getenv("RABBITMQ_URL"))
+			log.Println("✅ Connected to RabbitMQ Publisher (inventory)")
 			break
 		}
-		log.Println("⚠️ RabbitMQ not ready for publisher (inventory), retrying in 3s...", err)
+		log.Println("⚠️ RabbitMQ publisher retry in 3s...")
 		time.Sleep(3 * time.Second)
 	}
 	defer pub.Close()
 
+	// RabbitMQ Consumer
 	var consumer *events.RabbitMQConsumer
 	for {
 		consumer, err = events.NewRabbitMQConsumer()
 		if err == nil {
-			log.Println("✅ Connected to RabbitMQ Consumer:", os.Getenv("RABBITMQ_URL"))
+			log.Println("✅ Connected to RabbitMQ Consumer")
 			break
 		}
-
-		log.Println("⚠️ RabbitMQ not ready yet for Consumer, retrying in 3 seconds...")
+		log.Println("⚠️ RabbitMQ consumer retry in 3s...")
 		time.Sleep(3 * time.Second)
 	}
 	defer consumer.Close()
+
 	orderConsumer := events.NewOrderCreatedConsumer(consumer.Channel(), productUC, pub)
-
 	go func() {
-
 		if err := orderConsumer.Consume(); err != nil {
-			log.Fatal("❌ Failed to start order.created consumer:", err)
+			log.Fatal("❌ Order consumer failed:", err)
 		}
 	}()
 
-	log.Println("✅ RabbitMQ order.created consumer started")
+	// Start gRPC
+	go func() {
+		lis, err := net.Listen("tcp", ":50051")
+		if err != nil {
+			log.Fatalf("❌ failed to listen: %v", err)
+		}
+		log.Println("🚀 gRPC Inventory Service running on :50051")
+		if err := s.Serve(lis); err != nil {
+			log.Fatalf("gRPC serve error: %v", err)
+		}
+	}()
 
-	productHandler := grpchandler.NewProductHandler(productUC)
-	s := grpc.NewServer()
-	pb.RegisterInventoryServiceServer(s, productHandler)
+	// Start HTTP REST API + Prometheus Gin
+	r := gin.Default()
+	infrastructure.AttachGinMetrics(r, "inventory_service")
+
+	productHandlerHTTP := handler.NewProductHandler(productUC)
 	discountRepo := repository.NewDiscountRepo(database)
 	discountUC := usecase.NewDiscountUseCase(discountRepo)
-	discountHandlerr := handler.NewDiscountHandler(discountUC)
-	productUCgin := usecase.NewProductUseCase(productRepo)
-	productHandlerr := handler.NewProductHandler(productUCgin)
-	r := gin.Default()
-	productHandlerr.RegisterRoutes(r)
-	discountHandlerr.RegisterRoutes(r)
-	log.Println("Inventory Service running on :50051")
+	discountHandlerHTTP := handler.NewDiscountHandler(discountUC)
 
-	go func() {
-		log.Println("🚀 Starting gRPC Inventory Service on :50051")
-		if err := s.Serve(lis); err != nil {
-			log.Fatalf("gRPC server failed: %v", err)
-		}
-	}()
+	productHandlerHTTP.RegisterRoutes(r)
+	discountHandlerHTTP.RegisterRoutes(r)
 
-	log.Println("🌍 Starting REST Inventory API on :8081")
+	log.Println("🌍 REST Inventory API running on :8081")
 	if err := r.Run(":8081"); err != nil {
-		log.Fatalf("Failed to run REST API: %v", err)
+		log.Fatalf("REST API error: %v", err)
 	}
 }

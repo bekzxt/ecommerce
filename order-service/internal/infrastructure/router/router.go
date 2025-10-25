@@ -5,9 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRouter(orderHandler http.OrderHandler) *gin.Engine {
-	r := gin.Default()
-
+func SetupRoutes(r *gin.Engine, orderHandler http.OrderHandler) {
 	orderRoutes := r.Group("/orders")
 	{
 		orderRoutes.POST("/", orderHandler.CreateOrder)
@@ -15,6 +13,4 @@ func SetupRouter(orderHandler http.OrderHandler) *gin.Engine {
 		orderRoutes.PATCH("/:id", orderHandler.UpdateOrderStatus)
 		orderRoutes.GET("/", orderHandler.ListOrders)
 	}
-
-	return r
 }

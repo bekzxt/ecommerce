@@ -25,6 +25,7 @@ func (h *ProductHandler) RegisterRoutes(r *gin.Engine) {
 		products.PATCH("/:id", h.Update)
 		products.DELETE("/:id", h.Delete)
 		products.GET("", h.List)
+		products.POST("/check", h.CheckStock)
 	}
 }
 
@@ -113,4 +114,34 @@ func (h *ProductHandler) List(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, products)
+}
+
+// CheckStock проверяет наличие товаров на складе
+func (h *ProductHandler) CheckStock(c *gin.Context) {
+	var req struct {
+		Items []domain.OrderItemInv `json:"items"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ok":      false,
+			"message": "Invalid request format",
+		})
+		return
+	}
+
+	ok, missing := h.uc.CheckStock(req.Items)
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{
+			"ok":      false,
+			"message": "Not enough stock",
+			"missing": missing,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":      true,
+		"message": "Stock available",
+	})
 }
