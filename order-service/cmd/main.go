@@ -18,6 +18,8 @@ import (
 	"google.golang.org/grpc"
 	"log"
 	"net"
+	"os"
+	"time"
 )
 
 func main() {
@@ -33,6 +35,23 @@ func main() {
 	if err != nil {
 		log.Fatalf("❌ Failed to connect RabbitMQ after retries: %v", err)
 	}
+
+	var publisher *events.RabbitMQPublisher
+	for {
+		publisher, err = events.NewRabbitMQPublisher()
+		if err == nil {
+			log.Println("✅ Connected to RabbitMQ:", os.Getenv("RABBITMQ_URL"))
+			break
+		}
+
+		log.Println("⚠️ RabbitMQ not ready yet, retrying in 3 seconds...")
+		time.Sleep(3 * time.Second)
+	}
+	defer publisher.Close()
+	if err != nil {
+		log.Fatalf("❌ Failed to connect RabbitMQ after retries: %v", err)
+	}
+
 	// Build dependencies
 	orderRepo := repository.NewOrderRepository(database)
 	orderItemRepo := repository.NewOrderItemRepository(database)
@@ -49,7 +68,7 @@ func main() {
 		defer cleanup()
 	}
 	invClient := infrastructure.NewInventoryClient("http://inventory-service:8081")
-	orderUseCase := usecase.NewOrderUseCase(orderRepo, orderItemRepo, invClient)
+	orderUseCase := usecase.NewOrderUseCase(orderRepo, orderItemRepo, invClient, publisher)
 	reviewUseCase := usecase.NewReviewUseCase(reviewRepo)
 
 	// HTTP handler

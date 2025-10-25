@@ -11,8 +11,8 @@ export default function () {
     const payload = JSON.stringify({
         user_id: "12345",
         items: [
-            { product_id: 2, quantity: 2, price: 1500.50 },
-            { product_id: 2, quantity: 1, price: 3200.00 }
+            { product_id: 11, quantity: 2, price: 1500.50 },
+            { product_id: 11, quantity: 1, price: 3200.00 }
         ]
     });
 

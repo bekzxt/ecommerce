@@ -1,9 +1,9 @@
 package usecase
 
 import (
-	"fmt"
 	"github.com/bekzxt/e-commerce/order-service/internal/domain"
 	"github.com/bekzxt/e-commerce/order-service/internal/infrastructure"
+	"github.com/bekzxt/e-commerce/order-service/internal/infrastructure/events"
 	"github.com/bekzxt/e-commerce/order-service/internal/interfaces/dto"
 	"github.com/bekzxt/e-commerce/order-service/internal/interfaces/repository"
 	"github.com/google/uuid"
@@ -14,10 +14,11 @@ type OrderUseCase struct {
 	orderRepo       repository.OrderRepository
 	orderItemRepo   repository.OrderItemRepository
 	inventoryClient *infrastructure.InventoryClient
+	publisher       events.Publisher
 }
 
-func NewOrderUseCase(repo repository.OrderRepository, i repository.OrderItemRepository, invClient *infrastructure.InventoryClient) *OrderUseCase {
-	return &OrderUseCase{orderRepo: repo, orderItemRepo: i, inventoryClient: invClient}
+func NewOrderUseCase(repo repository.OrderRepository, i repository.OrderItemRepository, invClient *infrastructure.InventoryClient, pub events.Publisher) *OrderUseCase {
+	return &OrderUseCase{orderRepo: repo, orderItemRepo: i, inventoryClient: invClient, publisher: pub}
 }
 
 func (uc *OrderUseCase) CreateOrder(req dto.CreateOrderRequest) (*domain.Order, error) {
@@ -33,13 +34,6 @@ func (uc *OrderUseCase) CreateOrder(req dto.CreateOrderRequest) (*domain.Order, 
 		})
 		total += float64(item.Quantity) * item.Price
 	}
-	ok, msg, err := uc.inventoryClient.CheckStock(items)
-	if err != nil {
-		return nil, fmt.Errorf("inventory check failed: %v", err)
-	}
-	if !ok {
-		return nil, fmt.Errorf("cannot create order: %s", msg)
-	}
 	order := &domain.Order{
 		ID:         orderID,
 		UserID:     req.UserID,
@@ -47,6 +41,19 @@ func (uc *OrderUseCase) CreateOrder(req dto.CreateOrderRequest) (*domain.Order, 
 		Items:      items,
 		Status:     domain.Pending,
 	}
+	event := domain.OrderCreatedEvent{
+		OrderID: order.ID,
+		UserID:  order.UserID,
+		Total:   order.TotalPrice,
+		Status:  string(order.Status),
+		Items:   order.Items,
+	}
+
+	err := uc.publisher.Publish("order.created", event)
+	if err != nil {
+		log.Printf("⚠️ Failed to publish event: %v", err) // Не ломаем сервис
+	}
+
 	if err := uc.orderRepo.CreateOrder(order); err != nil {
 		return nil, err
 	}

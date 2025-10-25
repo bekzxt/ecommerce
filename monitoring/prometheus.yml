@@ -10,3 +10,11 @@ scrape_configs:
   - job_name: 'inventory-service'
     static_configs:
       - targets: ['inventory-service:2113']
+
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq-exporter:9419']
+
+  - job_name: "node"
+    static_configs:
+      - targets: [ "node-exporter:9100" ]
